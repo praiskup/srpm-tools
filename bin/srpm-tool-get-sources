@@ -1,0 +1,140 @@
+#! /usr/bin/perl -w
+
+# Tool to obtain source files needed to build SRPM.
+# Copyright (C) 2016 Red Hat, Inc.
+# Written by Pavel Raiskup <praiskup@redhat.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+use YAML;
+use Cwd;
+use File::Basename;
+
+my $config_filename = ".srpmconfig";
+
+open (my $config_file, "<", $config_filename) or die "Couldn't open file: '$config_filename'";
+my ($config) = Load(join('', <$config_file>));
+
+sub info
+{
+    print (" * @_\n");
+}
+
+# TODO: use 'ipairs' as %autosetup uses, or at least `rpmspec` tool (no need to
+# depend on rpmdevtools).
+my @sources = `spectool $config->{spec} -S`;
+if ($? >> 8) {
+    die ("can't successfully run 'spectool'");
+}
+
+sub compressor
+{
+    my ($filename) = @_;
+    info "$filename";
+    if ($filename =~ /(\.tar\.gz|\.tgz$)/) {
+        return "gzip";
+    }
+    return "cat";
+}
+
+sub obtain_source
+{
+    my ($id, $config, $srcname) = @_;
+    my $tarball_dir = cwd();
+
+    if (!defined($config->{method})) {
+        die "$id blah";
+    }
+    my $method = $config->{method};
+
+    if ($method eq "git_archive") {
+        my $srcdir = ".";
+        info ("generating tarball '$srcname' from git repository");
+
+        if (defined ($config->{git_archive}) and
+            defined ($config->{git_archive}->{repo}))
+        {
+            my $a_config = $config->{git_archive}->{repo};
+
+            # This is not going to be cloned from the "main" git repo, but
+            # rather from separate one.
+            if (!defined $a_config->{address} ||
+                !defined $a_config->{subdir}) {
+                die ("'repo' argument in .srpmdir requires 'address' and 'subdir' sub-parameters");
+            }
+            $srcdir = $a_config->{subdir};
+            if (-d "$srcdir") {
+                info "subdirectory '$srcdir' already exists";
+                # TODO: pull && checkout proper branch
+            }
+            else {
+                info "git clone $a_config->{address}";
+                system ("git clone $a_config->{address} $a_config->{subdir}");
+                if ($? >> 8) {
+                    die ("can't clone $a_config->{address}");
+                }
+            }
+        }
+
+        my $topleveldir = `cd "$srcdir" && git rev-parse --show-toplevel`;
+        if ($? >> 8) {
+            die ("can't get git top level directory");
+        }
+        chomp ($topleveldir);
+
+        my $pfx = $srcname;
+        $pfx =~ s/(\.tar\.(g|b)z|tgz)$//;
+        if (defined $config->{archive_prefix}) {
+            $pfx = $config->{archive_prefix};
+            info "using explicit prefix '$pfx'";
+        }
+
+        my $cmd ="cd '$srcdir' && git archive --remote '$topleveldir' --prefix $pfx/ HEAD" .
+                "| ". compressor($srcname) ."> '$tarball_dir/$srcname'" ;
+        system ($cmd);
+        if ($? >> 8) {
+            die ("can't generate tarball $srcname");
+        }
+        return;
+    }
+
+    die ("no method specified to obtain sources for '$id'\n");
+}
+
+# Go through all 'SourceN' statements in spec file.
+for my $source_line (@sources)
+{
+    chomp $source_line;
+    my ($id, $source) = split (/ /, $source_line, 2);
+    $id =~ s/:$//;
+    $id = lc ($id);
+
+    my $src_basename = basename ($source);
+    if (-f "$src_basename") {
+        info "$src_basename already exists";
+        next;
+    }
+
+    if (defined ($config->{$id})) {
+        obtain_source ($id, $config->{$id}, $src_basename);
+        next;
+    }
+
+    info ("downloading sources $source");
+    system ("wget", "-q", "$source");
+    if ($? >> 8) {
+        die ("can't wget $source");
+    }
+}
