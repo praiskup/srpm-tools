@@ -1,0 +1,61 @@
+#! /bin/bash -x
+
+# Simple wrapper around rpmbuild utility.
+# Copyright (C) 2016 Red Hat, Inc.
+# Written by Pavel Raiskup <praiskup@redhat.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+test -z "$RPMBUILD" && RPMBUILD=rpmbuild
+
+# Rewrite '$@' into '${ARGS[@]}', and then use 'ARGS'.
+ARGS=( )
+
+for i in "$@"; do
+    case "$i" in
+        # In copr we build also for RHEL5 for example, so we need those
+        # arguments.
+        --copr)
+            ARGS+=( --define "_source_filedigest_algorithm md5" )
+            ARGS+=( --define "_binary_filedigest_algorithm md5" )
+            ARGS+=( --define "dist %nil" )
+            ;;
+
+        *)
+            ARGS+=( "$i" )
+            ;;
+    esac
+done
+
+run_rpmbuild()
+{
+    $RPMBUILD \
+        --define "_sourcedir $PWD"      \
+        --define "_rpmdir $PWD"         \
+        --define "_specdir $PWD"        \
+        --define "_builddir $PWD"       \
+        --define "_srcrpmdir $PWD"      \
+        --buildroot "$PWD/buildroot"    \
+        "$@"
+}
+
+case "$0" in
+    *build_local_nocheck)
+        ARGS+=( --define "runselftest 0" )
+        ARGS+=( --without=check )
+        ;;
+esac
+
+run_rpmbuild "${ARGS[@]}"

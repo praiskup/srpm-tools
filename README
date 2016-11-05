@@ -1,0 +1,82 @@
+==============
+ SRPM TOOLSET
+==============
+
+Set of tools to obtain all sources to build SRPM (source RPM -> *.src.rpm
+file), which then can be built into binary RPM.
+
+This is useful for continuous integration/development purposes -> when you
+e.g. want to (a) generate SRPM for each "git push" into repository, and
+(b) then try to build RPMs.
+
+Motivation:
+
+  SRPM is generated from SPEC [1] file && set of sources (those sources
+  are also pointed to by SPEC file).  Such sources are usually "released
+  tarballs".  For continuous integration purposes, such upstream released
+  tarball either do not exist _yet_ (so those need to be generated from
+  git) or at least the tarball is not stored within git repository
+  (together with SPEC file) so it needs to be downloaded.  That's where
+  this project should help.
+
+
+srpm-get-sources
+----------------
+
+  Download or generate sources from spec file.  This script must be run
+  from directory where '.srpmconfig' file and spec file exist.
+
+  If the source file doesn't exist yet, the tool tries to 'wget' it, or
+  generate it via git-archive.
+
+
+srpm-generator
+--------------
+
+  Generate source RPM based on spec file and .srpmconfig file.
+
+
+.srpmconfig semantics (YAML)
+----------------------------
+
+    # Find 'NAME.spec' in this directory, and parse it's contents.
+    specfile: NAME.spec
+
+    # Handle Source0 tag explicitly.
+    source0:
+        # Generate tarball via 'git archive' command (whole git project).
+        method: git_archive
+
+        # Members within generated tarball will start with 'NAME-VERSION/'
+        # path.  This is is optional (the prefix is usually detected from
+        # tarball name, e.g. "tar-1.19" for "tar-1.19.tar.gz").
+        archive_prefix: NAME-VERSION
+
+        # Additional data for git_archive method, optional.
+        git_archive:
+            repo:
+                # Instead of using the actual git repository, clone this one.
+                address: https://git-clone-url.com/project
+                # Clone the project into this subdirectory.
+                subdir: project
+
+FAQ
+---
+(Q) Why the .srpmconfig is needed?  Why we don't define those data
+    within SPEC file directly?
+(A) SPEC files are usually used by "downstreams" (e.g. by
+    Fedora/RHEL/SUSE/Mageia/..) to build binary RPMs.  Downstream
+    packagers however want to build RPMs from _released_ tarballs -- not from
+    generated ones.  Having .srpmconfig file minimizes differences between
+    downstream SPEC files and the one used for CI purposes.
+
+
+REQUIREMENTS
+------------
+
+- rpmdevtools
+- git
+- perl-YAML
+- rpm-build
+
+[1] https://en.wikipedia.org/wiki/RPM_Package_Manager#SPEC_file
