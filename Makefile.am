@@ -19,6 +19,7 @@
 bin_SCRIPTS =
 libexec_SCRIPTS =
 noinst_SCRIPTS =
+CLEANFILES =
 
 libexec_SCRIPTS += \
 	libexec/srpm-build
@@ -44,3 +45,5 @@ EXTRA_DIST = \
 	$(INSTALL_SCRIPT).in \
 	$(bin_SCRIPTS) \
 	libexec/srpm-build
+
+CLEANFILES += $(INSTALL_SCRIPT)
