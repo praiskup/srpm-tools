@@ -9,6 +9,10 @@ This is useful for continuous integration/development purposes -> when you
 e.g. want to (a) generate SRPM for each "git push" into repository, and
 (b) then try to build RPMs.
 
+Install by 'autoreconf && ./configure && make install', or for now:
+
+  https://copr.fedorainfracloud.org/coprs/praiskup/srpm-tools/
+
 Motivation:
 
   SRPM is generated from SPEC [1] file && set of sources (those sources
